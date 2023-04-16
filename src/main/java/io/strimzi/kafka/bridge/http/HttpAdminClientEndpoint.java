@@ -19,11 +19,7 @@ import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
-import io.vertx.kafka.admin.Config;
-import io.vertx.kafka.admin.ConfigEntry;
-import io.vertx.kafka.admin.ListOffsetsResultInfo;
-import io.vertx.kafka.admin.OffsetSpec;
-import io.vertx.kafka.admin.TopicDescription;
+import io.vertx.kafka.admin.*;
 import io.vertx.kafka.client.common.ConfigResource;
 import io.vertx.kafka.client.common.TopicPartition;
 import io.vertx.kafka.client.common.TopicPartitionInfo;
@@ -43,10 +39,9 @@ public class HttpAdminClientEndpoint extends AdminClientEndpoint {
     private HttpBridgeContext httpBridgeContext;
 
     /**
-     *
-     * @param vertx the Vert.x instance
+     * @param vertx        the Vert.x instance
      * @param bridgeConfig the bridge configuration
-     * @param context the HTTP bridge context
+     * @param context      the HTTP bridge context
      */
     public HttpAdminClientEndpoint(Vertx vertx, BridgeConfig bridgeConfig, HttpBridgeContext context) {
         super(vertx, bridgeConfig);
@@ -65,7 +60,11 @@ public class HttpAdminClientEndpoint extends AdminClientEndpoint {
             case LIST_TOPICS:
                 doListTopics(routingContext);
                 break;
-
+            case CREATE_TOPIC:
+            case CREATE_TOPIC_PARTITION:
+            case CREATE_TOPIC_PARTITION_REPLICAS:
+                doCreateTopic(routingContext);
+                break;
             case GET_TOPIC:
                 doGetTopic(routingContext);
                 break;
@@ -86,6 +85,37 @@ public class HttpAdminClientEndpoint extends AdminClientEndpoint {
                 throw new IllegalArgumentException("Unknown Operation: " + this.httpBridgeContext.getOpenApiOperation());
 
         }
+    }
+
+    private void doCreateTopic(RoutingContext routingContext) {
+        try {
+            String topicName = routingContext.pathParam("topicname");
+            int numberOfPartitions = 1;
+            short numberOfReplica = 1;
+            String partition = routingContext.pathParam("partition");
+            if (partition != null) {
+                numberOfPartitions = Integer.parseInt(partition);
+            }
+            String replicationFactor = routingContext.pathParam("replication");
+            if (replicationFactor != null) {
+                numberOfReplica = Short.parseShort(replicationFactor);
+            }
+
+            createTopic(topicName, numberOfPartitions, numberOfReplica);
+            JsonObject root = new JsonObject();
+            root.put("topicName", topicName);
+            root.put("numberOfReplicas", numberOfReplica);
+            root.put("numberOfPartitions", numberOfPartitions);
+            HttpUtils.sendResponse(routingContext, HttpResponseStatus.OK.code(), BridgeContentType.JSON, root.toBuffer());
+        } catch (Exception e) {
+            HttpBridgeError error = new HttpBridgeError(
+                    HttpResponseStatus.INTERNAL_SERVER_ERROR.code(),
+                    e.getMessage()
+            );
+            HttpUtils.sendResponse(routingContext, HttpResponseStatus.INTERNAL_SERVER_ERROR.code(),
+                    BridgeContentType.JSON, error.toJson().toBuffer());
+        }
+
     }
 
     /**

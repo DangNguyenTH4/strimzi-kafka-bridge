@@ -26,6 +26,10 @@ public enum HttpOpenApiOperations {
     LIST_SUBSCRIPTIONS("listSubscriptions"),
     /** list topics on the cluster */
     LIST_TOPICS("listTopics"),
+    /** Create topics */
+    CREATE_TOPIC("createTopic"),
+    CREATE_TOPIC_PARTITION("createTopicPartition"),
+    CREATE_TOPIC_PARTITION_REPLICAS("createTopicPartitionReplica"),
     /** get information for a specific topic */
     GET_TOPIC("getTopic"),
     /** list partitions for a specific topic */
