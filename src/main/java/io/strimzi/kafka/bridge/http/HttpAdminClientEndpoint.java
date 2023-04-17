@@ -11,6 +11,7 @@ import io.strimzi.kafka.bridge.BridgeContentType;
 import io.strimzi.kafka.bridge.Endpoint;
 import io.strimzi.kafka.bridge.config.BridgeConfig;
 import io.strimzi.kafka.bridge.http.model.HttpBridgeError;
+import io.strimzi.kafka.bridge.http.model.KafkaConfigBody;
 import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
@@ -18,6 +19,7 @@ import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import io.vertx.ext.web.RequestBody;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.kafka.admin.TopicDescription;
 import io.vertx.kafka.admin.ConfigEntry;
@@ -69,6 +71,12 @@ public class HttpAdminClientEndpoint extends AdminClientEndpoint {
             case CREATE_TOPIC_PARTITION_REPLICAS:
                 doCreateTopic(routingContext);
                 break;
+            case DELETE_TOPIC:
+                doDeleteTopic(routingContext);
+                break;
+            case UPDATE_TOPIC_CONFIGS:
+                doUpdateTopicConfig(routingContext);
+                break;
             case GET_TOPIC:
                 doGetTopic(routingContext);
                 break;
@@ -92,33 +100,50 @@ public class HttpAdminClientEndpoint extends AdminClientEndpoint {
     }
 
     private void doCreateTopic(RoutingContext routingContext) {
-        try {
-            String topicName = routingContext.pathParam("topicname");
-            int numberOfPartitions = 1;
-            short numberOfReplica = 1;
-            String partition = routingContext.pathParam("partition");
-            if (partition != null) {
-                numberOfPartitions = Integer.parseInt(partition);
+        RequestBody requestBody = routingContext.body();
+        KafkaConfigBody kafkaConfigBody = requestBody.asPojo(KafkaConfigBody.class);
+        String topicName = routingContext.pathParam("topicname");
+        int numberOfPartitions = kafkaConfigBody.getPartitions();
+        short numberOfReplica = (short) kafkaConfigBody.getReplicationFactor();
+        createTopic(kafkaConfigBody.getConfigs(), topicName, numberOfPartitions, numberOfReplica, handle -> {
+            if (handle.succeeded()) {
+                JsonObject root = new JsonObject();
+                root.put("topicName", topicName);
+                root.put("numberOfReplicas", numberOfReplica);
+                root.put("numberOfPartitions", numberOfPartitions);
+                HttpUtils.sendResponse(routingContext, HttpResponseStatus.OK.code(), BridgeContentType.JSON, root.toBuffer());
+            } else {
+                HttpBridgeError error = new HttpBridgeError(
+                        HttpResponseStatus.INTERNAL_SERVER_ERROR.code(),
+                        handle.cause().getMessage());
+                HttpUtils.sendResponse(routingContext, HttpResponseStatus.INTERNAL_SERVER_ERROR.code(),
+                        BridgeContentType.JSON, error.toJson().toBuffer());
             }
-            String replicationFactor = routingContext.pathParam("replication");
-            if (replicationFactor != null) {
-                numberOfReplica = Short.parseShort(replicationFactor);
+        });
+
+    }
+
+    private void doDeleteTopic(RoutingContext routingContext) {
+        String topicName = routingContext.pathParam("topicname");
+        deleteTopics(List.of(topicName), handle -> {
+            if (handle.succeeded()) {
+                JsonObject root = new JsonObject();
+                root.put("topicName", topicName);
+                HttpUtils.sendResponse(routingContext, HttpResponseStatus.OK.code(), BridgeContentType.JSON, root.toBuffer());
+            } else {
+                HttpBridgeError error = new HttpBridgeError(
+                        HttpResponseStatus.INTERNAL_SERVER_ERROR.code(),
+                        handle.cause().getMessage()
+                );
+                HttpUtils.sendResponse(routingContext, HttpResponseStatus.INTERNAL_SERVER_ERROR.code(),
+                        BridgeContentType.JSON, error.toJson().toBuffer());
             }
 
-            createTopic(topicName, numberOfPartitions, numberOfReplica);
-            JsonObject root = new JsonObject();
-            root.put("topicName", topicName);
-            root.put("numberOfReplicas", numberOfReplica);
-            root.put("numberOfPartitions", numberOfPartitions);
-            HttpUtils.sendResponse(routingContext, HttpResponseStatus.OK.code(), BridgeContentType.JSON, root.toBuffer());
-        } catch (Exception e) {
-            HttpBridgeError error = new HttpBridgeError(
-                    HttpResponseStatus.INTERNAL_SERVER_ERROR.code(),
-                    e.getMessage()
-            );
-            HttpUtils.sendResponse(routingContext, HttpResponseStatus.INTERNAL_SERVER_ERROR.code(),
-                    BridgeContentType.JSON, error.toJson().toBuffer());
-        }
+        });
+
+    }
+
+    private void doUpdateTopicConfig(RoutingContext routingContext) {
 
     }
 

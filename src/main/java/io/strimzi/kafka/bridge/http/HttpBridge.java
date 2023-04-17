@@ -160,6 +160,8 @@ public class HttpBridge extends AbstractVerticle {
                 routerBuilder.operation(this.CREATE_TOPIC.getOperationId().toString()).handler(this.CREATE_TOPIC);
                 routerBuilder.operation(HttpOpenApiOperations.CREATE_TOPIC_PARTITION.toString()).handler(this.CREATE_TOPIC);
                 routerBuilder.operation(HttpOpenApiOperations.CREATE_TOPIC_PARTITION_REPLICAS.toString()).handler(this.CREATE_TOPIC);
+                routerBuilder.operation(this.DELETE_TOPIC.getOperationId().toString()).handler(this.DELETE_TOPIC);
+                routerBuilder.operation(this.UPDATE_TOPIC_CONFIGS.getOperationId().toString()).handler(this.UPDATE_TOPIC_CONFIGS);
                 routerBuilder.operation(this.GET_TOPIC.getOperationId().toString()).handler(this.GET_TOPIC);
                 routerBuilder.operation(this.LIST_PARTITIONS.getOperationId().toString()).handler(this.LIST_PARTITIONS);
                 routerBuilder.operation(this.GET_PARTITION.getOperationId().toString()).handler(this.GET_PARTITION);
@@ -370,6 +372,16 @@ public class HttpBridge extends AbstractVerticle {
         this.httpBridgeContext.setOpenApiOperation(HttpOpenApiOperations.CREATE_TOPIC);
         this.httpBridgeContext.setOpenApiOperation(HttpOpenApiOperations.CREATE_TOPIC_PARTITION);
         this.httpBridgeContext.setOpenApiOperation(HttpOpenApiOperations.CREATE_TOPIC_PARTITION_REPLICAS);
+        processAdminClient(routingContext);
+    }
+
+    private void deleteTopic(RoutingContext routingContext) {
+        this.httpBridgeContext.setOpenApiOperation(HttpOpenApiOperations.DELETE_TOPIC);
+        processAdminClient(routingContext);
+    }
+
+    private void updateTopic(RoutingContext routingContext) {
+        this.httpBridgeContext.setOpenApiOperation(HttpOpenApiOperations.UPDATE_TOPIC_CONFIGS);
         processAdminClient(routingContext);
     }
 
@@ -721,6 +733,21 @@ public class HttpBridge extends AbstractVerticle {
         @Override
         public void process(RoutingContext routingContext) {
             createTopic(routingContext);
+        }
+    };
+
+    HttpOpenApiOperation DELETE_TOPIC = new HttpOpenApiOperation(HttpOpenApiOperations.DELETE_TOPIC) {
+
+        @Override
+        public void process(RoutingContext routingContext) {
+            deleteTopic(routingContext);
+        }
+    };
+    HttpOpenApiOperation UPDATE_TOPIC_CONFIGS = new HttpOpenApiOperation(HttpOpenApiOperations.UPDATE_TOPIC_CONFIGS) {
+
+        @Override
+        public void process(RoutingContext routingContext) {
+            updateTopic(routingContext);
         }
     };
 

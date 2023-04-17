@@ -18,15 +18,13 @@ import io.vertx.kafka.admin.OffsetSpec;
 import io.vertx.kafka.admin.ListOffsetsResultInfo;
 import io.vertx.kafka.client.common.ConfigResource;
 import io.vertx.kafka.client.common.TopicPartition;
+import org.apache.kafka.clients.admin.*;
+import org.apache.kafka.common.config.TopicConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 //import java.util.*;
-import java.util.Properties;
-import java.util.Set;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 
 /**
@@ -93,12 +91,41 @@ public abstract class AdminClientEndpoint implements BridgeEndpoint {
         this.adminClient.listTopics(handler);
     }
 
-    protected void createTopic(String name, int partition, short re) {
+    protected void createTopic(Map<String, String> configs, String name, int partition, short re,
+                               Handler<AsyncResult<Void>> handler) {
         log.info("Create topic, topic name: {}", name);
         NewTopic newTopic = new NewTopic(name, partition, re);
-        this.adminClient.createTopics(Collections.singletonList(newTopic));
+        if(configs != null && !configs.isEmpty()){
+            newTopic.setConfig(configs);
+        }
+        this.adminClient.createTopics(Collections.singletonList(newTopic), handler);
     }
 
+    protected void deleteTopics(List<String> topics, Handler<AsyncResult<Void>> handler) {
+        log.info("Delete topics");
+        this.adminClient.deleteTopics(topics, handler);
+    }
+    protected void updateTopicConfig(String name, Map<String, String> configsToSet,
+                                     Handler<AsyncResult<Void>> handler) {
+        log.info("Update topic, topic name: {}", name);
+        ConfigResource resource = new ConfigResource(org.apache.kafka.common.config.ConfigResource.Type.TOPIC, name);
+        this.adminClient.describeConfigs(List.of(resource), result-> {
+            if(result.succeeded()){
+                Config config = (Config)result.result().values().toArray()[0];
+                config.getEntries().
+
+                ConfigEntry retentionEntry = new ConfigEntry(TopicConfig.RETENTION_MS_CONFIG, "51000");
+                ConfigEntry retention2 = new ConfigEntry(TopicConfig.CLEANUP_POLICY_COMPACT, "51000");
+                Map<ConfigResource, Config> updateConfig = new HashMap<>();
+//        updateConfig.put(resource, new Config(Collections.singletonList(retentionEntry)));
+                adminClient.alterConfigs(updateConfig, handler);
+            } else {
+
+            }
+
+        });
+
+    }
     /**
      * Returns the description of the specified topics.
      */

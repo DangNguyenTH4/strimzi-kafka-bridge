@@ -28,9 +28,11 @@ public enum HttpOpenApiOperations {
     LIST_TOPICS("listTopics"),
     /** Create topics */
     CREATE_TOPIC("createTopic"),
+    UPDATE_TOPIC_CONFIGS("updateTopicConfigs"),
     CREATE_TOPIC_PARTITION("createTopicPartition"),
     CREATE_TOPIC_PARTITION_REPLICAS("createTopicPartitionReplica"),
     /** get information for a specific topic */
+    DELETE_TOPIC("deleteTopic"),
     GET_TOPIC("getTopic"),
     /** list partitions for a specific topic */
     LIST_PARTITIONS("listPartitions"),
