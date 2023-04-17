@@ -7,9 +7,9 @@ package io.strimzi.kafka.bridge;
 
 import io.strimzi.kafka.bridge.config.BridgeConfig;
 import io.strimzi.kafka.bridge.config.KafkaConfig;
-import io.vertx.core.AsyncResult;
-import io.vertx.core.Handler;
-import io.vertx.core.Vertx;
+import io.vertx.core.*;
+import io.vertx.core.impl.ContextInternal;
+import io.vertx.kafka.admin.ConfigEntry;
 import io.vertx.kafka.admin.KafkaAdminClient;
 import io.vertx.kafka.admin.NewTopic;
 import io.vertx.kafka.admin.TopicDescription;
@@ -25,6 +25,8 @@ import org.slf4j.LoggerFactory;
 
 //import java.util.*;
 import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 
 /**
@@ -95,7 +97,7 @@ public abstract class AdminClientEndpoint implements BridgeEndpoint {
                                Handler<AsyncResult<Void>> handler) {
         log.info("Create topic, topic name: {}", name);
         NewTopic newTopic = new NewTopic(name, partition, re);
-        if(configs != null && !configs.isEmpty()){
+        if (configs != null && !configs.isEmpty()) {
             newTopic.setConfig(configs);
         }
         this.adminClient.createTopics(Collections.singletonList(newTopic), handler);
@@ -111,16 +113,26 @@ public abstract class AdminClientEndpoint implements BridgeEndpoint {
         ConfigResource resource = new ConfigResource(org.apache.kafka.common.config.ConfigResource.Type.TOPIC, name);
         this.adminClient.describeConfigs(List.of(resource), result-> {
             if(result.succeeded()){
-                Config config = (Config)result.result().values().toArray()[0];
-                config.getEntries().
-
-                ConfigEntry retentionEntry = new ConfigEntry(TopicConfig.RETENTION_MS_CONFIG, "51000");
-                ConfigEntry retention2 = new ConfigEntry(TopicConfig.CLEANUP_POLICY_COMPACT, "51000");
+                Config config  = result.result().get(resource);
+                List<ConfigEntry> configEntries = new ArrayList<>();
+                Map<String, ConfigEntry> mapConfig = config.getEntries().stream().collect(Collectors.toMap(ConfigEntry::getName, Function.identity()));
+                for (Map.Entry<String, String> entry : configsToSet.entrySet()) {
+                    String configName = entry.getKey();
+                    String targetConfigValue = entry.getValue();
+                    if (mapConfig.get(configName) == null || !mapConfig.get(configName).getValue().equals(targetConfigValue)) {
+                        configEntries.add(new ConfigEntry(configName, targetConfigValue));
+                    }
+                }
+                config.setEntries(configEntries);
                 Map<ConfigResource, Config> updateConfig = new HashMap<>();
-//        updateConfig.put(resource, new Config(Collections.singletonList(retentionEntry)));
+                updateConfig.put(resource, config);
                 adminClient.alterConfigs(updateConfig, handler);
-            } else {
 
+            } else {
+                ContextInternal ctx = (ContextInternal)this.vertx.getOrCreateContext();
+                Promise<Void> promise = ctx.promise();
+                promise.fail(result.cause());
+                promise.future().onComplete(handler);
             }
 
         });

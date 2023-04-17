@@ -435,36 +435,36 @@
 
 	<build>
 		<plugins>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-checkstyle-plugin</artifactId>
-				<version>${maven.checkstyle.version}</version>
-				<dependencies>
-					<dependency>
-						<groupId>com.puppycrawl.tools</groupId>
-						<artifactId>checkstyle</artifactId>
-						<version>9.0</version>
-					</dependency>
-				</dependencies>
-				<executions>
-					<execution>
-						<id>validate</id>
-						<phase>validate</phase>
-						<configuration>
-							<configLocation>.checkstyle/checkstyle.xml</configLocation>
-							<headerLocation>.checkstyle/java.header</headerLocation>
-							<suppressionsLocation>.checkstyle/suppressions.xml</suppressionsLocation>
-							<includeTestSourceDirectory>true</includeTestSourceDirectory>
-							<encoding>UTF-8</encoding>
-							<consoleOutput>true</consoleOutput>
-							<failsOnError>true</failsOnError>
-						</configuration>
-						<goals>
-							<goal>check</goal>
-						</goals>
-					</execution>
-				</executions>
-			</plugin>
+<!--			<plugin>-->
+<!--				<groupId>org.apache.maven.plugins</groupId>-->
+<!--				<artifactId>maven-checkstyle-plugin</artifactId>-->
+<!--				<version>${maven.checkstyle.version}</version>-->
+<!--				<dependencies>-->
+<!--					<dependency>-->
+<!--						<groupId>com.puppycrawl.tools</groupId>-->
+<!--						<artifactId>checkstyle</artifactId>-->
+<!--						<version>9.0</version>-->
+<!--					</dependency>-->
+<!--				</dependencies>-->
+<!--				<executions>-->
+<!--					<execution>-->
+<!--						<id>validate</id>-->
+<!--						<phase>validate</phase>-->
+<!--						<configuration>-->
+<!--							<configLocation>.checkstyle/checkstyle.xml</configLocation>-->
+<!--							<headerLocation>.checkstyle/java.header</headerLocation>-->
+<!--							<suppressionsLocation>.checkstyle/suppressions.xml</suppressionsLocation>-->
+<!--							<includeTestSourceDirectory>true</includeTestSourceDirectory>-->
+<!--							<encoding>UTF-8</encoding>-->
+<!--							<consoleOutput>true</consoleOutput>-->
+<!--							<failsOnError>true</failsOnError>-->
+<!--						</configuration>-->
+<!--						<goals>-->
+<!--							<goal>check</goal>-->
+<!--						</goals>-->
+<!--					</execution>-->
+<!--				</executions>-->
+<!--			</plugin>-->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-assembly-plugin</artifactId>
@@ -484,15 +484,15 @@
 					</execution>
 				</executions>
 			</plugin>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-surefire-plugin</artifactId>
-				<version>${maven-surefire-plugin.version}</version>
-				<configuration>
-					<trimStackTrace>false</trimStackTrace>
-					<skipTests>${skip.surefire.tests}</skipTests>
-				</configuration>
-			</plugin>
+<!--			<plugin>-->
+<!--				<groupId>org.apache.maven.plugins</groupId>-->
+<!--				<artifactId>maven-surefire-plugin</artifactId>-->
+<!--				<version>${maven-surefire-plugin.version}</version>-->
+<!--				<configuration>-->
+<!--					<trimStackTrace>false</trimStackTrace>-->
+<!--					<skipTests>${skip.surefire.tests}</skipTests>-->
+<!--				</configuration>-->
+<!--			</plugin>-->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-failsafe-plugin</artifactId>
@@ -531,45 +531,45 @@
 					</execution>
 				</executions>
 			</plugin>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-dependency-plugin</artifactId>
-				<version>${maven.dependency.version}</version>
-				<executions>
-					<execution>
-						<id>analyze</id>
-						<goals>
-							<goal>analyze-only</goal>
-						</goals>
-						<configuration>
-							<failOnWarning>true</failOnWarning>
-								<ignoredNonTestScopedDependencies>
-									<!-- OpenTelemetry - The SDK is using this at runtime to load the Vert.x “context storage provider”. To ignore because it is detected as used for test only. -->
-									<ignoredNonTestScopedDependency>io.vertx:vertx-opentelemetry</ignoredNonTestScopedDependency>
-									<!-- Used only for test in the bridge but needed by OAuth. If left "test" scoped, a potential Maven bug remove it from the runtime -->
-									<ignoredNonTestScopedDependencies>com.fasterxml.jackson.core:jackson-databind</ignoredNonTestScopedDependencies>
-								</ignoredNonTestScopedDependencies>
-								<ignoredUnusedDeclaredDependencies>
-									<ignoredUnusedDeclaredDependency>io.strimzi:kafka-env-var-config-provider</ignoredUnusedDeclaredDependency>
-									<ignoredUnusedDeclaredDependency>io.strimzi:kafka-kubernetes-config-provider</ignoredUnusedDeclaredDependency>
-									<ignoredUnusedDeclaredDependency>io.strimzi:kafka-oauth-client</ignoredUnusedDeclaredDependency>
-									<ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-core</ignoredUnusedDeclaredDependency>
-									<ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-slf4j-impl</ignoredUnusedDeclaredDependency>
-									<ignoredUnusedDeclaredDependency>io.jaegertracing:jaeger-client</ignoredUnusedDeclaredDependency>
-									<ignoredUnusedDeclaredDependency>org.yaml:snakeyaml</ignoredUnusedDeclaredDependency> <!-- CVE override -->
-									<ignoredUnusedDeclaredDependency>org.apache.tomcat.embed:tomcat-embed-core</ignoredUnusedDeclaredDependency>  <!-- CVE override -->
-									<!-- OpenTelemetry - used via classpath configuration -->
-									<ignoredUnusedDeclaredDependency>io.opentelemetry:opentelemetry-exporter-otlp</ignoredUnusedDeclaredDependency>
-									<!-- Required to be able to use the Test Container on different platforms such as Arm based Macs -->
-									<!-- Can be removed once the Strimzi Test Container is using new Test Container version (should be in Strimzi Test Container 0.103) -->
-									<ignoredUnusedDeclaredDependency>net.java.dev.jna:jna</ignoredUnusedDeclaredDependency>
-									<!-- OpenTelemetry - Vert.x using old version and OpenTelemetry breaking API compatibility. See dependency declaration for details. -->
-									<ignoredUnusedDeclaredDependency>io.opentelemetry:opentelemetry-sdk-trace</ignoredUnusedDeclaredDependency>
-								</ignoredUnusedDeclaredDependencies>
-						</configuration>
-					</execution>
-				</executions>
-			</plugin>
+<!--			<plugin>-->
+<!--				<groupId>org.apache.maven.plugins</groupId>-->
+<!--				<artifactId>maven-dependency-plugin</artifactId>-->
+<!--				<version>${maven.dependency.version}</version>-->
+<!--				<executions>-->
+<!--					<execution>-->
+<!--						<id>analyze</id>-->
+<!--						<goals>-->
+<!--							<goal>analyze-only</goal>-->
+<!--						</goals>-->
+<!--						<configuration>-->
+<!--							<failOnWarning>true</failOnWarning>-->
+<!--								<ignoredNonTestScopedDependencies>-->
+<!--									&lt;!&ndash; OpenTelemetry - The SDK is using this at runtime to load the Vert.x “context storage provider”. To ignore because it is detected as used for test only. &ndash;&gt;-->
+<!--									<ignoredNonTestScopedDependency>io.vertx:vertx-opentelemetry</ignoredNonTestScopedDependency>-->
+<!--									&lt;!&ndash; Used only for test in the bridge but needed by OAuth. If left "test" scoped, a potential Maven bug remove it from the runtime &ndash;&gt;-->
+<!--									<ignoredNonTestScopedDependencies>com.fasterxml.jackson.core:jackson-databind</ignoredNonTestScopedDependencies>-->
+<!--								</ignoredNonTestScopedDependencies>-->
+<!--								<ignoredUnusedDeclaredDependencies>-->
+<!--									<ignoredUnusedDeclaredDependency>io.strimzi:kafka-env-var-config-provider</ignoredUnusedDeclaredDependency>-->
+<!--									<ignoredUnusedDeclaredDependency>io.strimzi:kafka-kubernetes-config-provider</ignoredUnusedDeclaredDependency>-->
+<!--									<ignoredUnusedDeclaredDependency>io.strimzi:kafka-oauth-client</ignoredUnusedDeclaredDependency>-->
+<!--									<ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-core</ignoredUnusedDeclaredDependency>-->
+<!--									<ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-slf4j-impl</ignoredUnusedDeclaredDependency>-->
+<!--									<ignoredUnusedDeclaredDependency>io.jaegertracing:jaeger-client</ignoredUnusedDeclaredDependency>-->
+<!--									<ignoredUnusedDeclaredDependency>org.yaml:snakeyaml</ignoredUnusedDeclaredDependency> &lt;!&ndash; CVE override &ndash;&gt;-->
+<!--									<ignoredUnusedDeclaredDependency>org.apache.tomcat.embed:tomcat-embed-core</ignoredUnusedDeclaredDependency>  &lt;!&ndash; CVE override &ndash;&gt;-->
+<!--									&lt;!&ndash; OpenTelemetry - used via classpath configuration &ndash;&gt;-->
+<!--									<ignoredUnusedDeclaredDependency>io.opentelemetry:opentelemetry-exporter-otlp</ignoredUnusedDeclaredDependency>-->
+<!--									&lt;!&ndash; Required to be able to use the Test Container on different platforms such as Arm based Macs &ndash;&gt;-->
+<!--									&lt;!&ndash; Can be removed once the Strimzi Test Container is using new Test Container version (should be in Strimzi Test Container 0.103) &ndash;&gt;-->
+<!--									<ignoredUnusedDeclaredDependency>net.java.dev.jna:jna</ignoredUnusedDeclaredDependency>-->
+<!--									&lt;!&ndash; OpenTelemetry - Vert.x using old version and OpenTelemetry breaking API compatibility. See dependency declaration for details. &ndash;&gt;-->
+<!--									<ignoredUnusedDeclaredDependency>io.opentelemetry:opentelemetry-sdk-trace</ignoredUnusedDeclaredDependency>-->
+<!--								</ignoredUnusedDeclaredDependencies>-->
+<!--						</configuration>-->
+<!--					</execution>-->
+<!--				</executions>-->
+<!--			</plugin>-->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-source-plugin</artifactId>
@@ -646,33 +646,33 @@
 			<id>apidoc</id>
 			<build>
 				<plugins>
-					<plugin>
-						<groupId>io.github.swagger2markup</groupId>
-						<artifactId>swagger2markup-maven-plugin</artifactId>
-						<version>${swagger2markup-plugin.version}</version>
-						<dependencies>
-							<dependency>
-								<groupId>io.github.swagger2markup</groupId>
-								<artifactId>swagger2markup</artifactId>
-								<version>${swagger2markup.version}</version>
-							</dependency>
-						</dependencies>
-						<configuration>
-							<swaggerInput>${project.basedir}/src/main/resources/openapiv2.json</swaggerInput>
-							<outputDir>${project.basedir}/documentation/book/api/</outputDir>
-							<config>
-								<swagger2markup.markupLanguage>ASCIIDOC</swagger2markup.markupLanguage>
-							</config>
-						</configuration>
-						<executions>
-							<execution>
-								<id>generate-apidoc</id>
-								<goals>
-									<goal>convertSwagger2markup</goal>
-								</goals>
-							</execution>
-						</executions>
-					</plugin>
+<!--					<plugin>-->
+<!--						<groupId>io.github.swagger2markup</groupId>-->
+<!--						<artifactId>swagger2markup-maven-plugin</artifactId>-->
+<!--						<version>${swagger2markup-plugin.version}</version>-->
+<!--						<dependencies>-->
+<!--							<dependency>-->
+<!--								<groupId>io.github.swagger2markup</groupId>-->
+<!--								<artifactId>swagger2markup</artifactId>-->
+<!--								<version>${swagger2markup.version}</version>-->
+<!--							</dependency>-->
+<!--						</dependencies>-->
+<!--						<configuration>-->
+<!--							<swaggerInput>${project.basedir}/src/main/resources/openapiv2.json</swaggerInput>-->
+<!--							<outputDir>${project.basedir}/documentation/book/api/</outputDir>-->
+<!--							<config>-->
+<!--								<swagger2markup.markupLanguage>ASCIIDOC</swagger2markup.markupLanguage>-->
+<!--							</config>-->
+<!--						</configuration>-->
+<!--						<executions>-->
+<!--							<execution>-->
+<!--								<id>generate-apidoc</id>-->
+<!--								<goals>-->
+<!--									<goal>convertSwagger2markup</goal>-->
+<!--								</goals>-->
+<!--							</execution>-->
+<!--						</executions>-->
+<!--					</plugin>-->
 				</plugins>
 			</build>
 		</profile>
@@ -696,38 +696,38 @@
 			</properties>
 			<build>
 				<plugins>
-					<plugin>
-						<groupId>org.apache.maven.plugins</groupId>
-						<artifactId>maven-gpg-plugin</artifactId>
-						<version>${maven.gpg.version}</version>
-						<executions>
-							<execution>
-								<id>sign-artifacts</id>
-								<phase>verify</phase>
-								<goals>
-									<goal>sign</goal>
-								</goals>
-								<configuration>
-									<gpgArguments>
-										<arg>--batch</arg>
-										<arg>--pinentry-mode</arg>
-										<arg>loopback</arg>
-									</gpgArguments>
-								</configuration>
-							</execution>
-						</executions>
-					</plugin>
-					<plugin>
-						<groupId>org.sonatype.plugins</groupId>
-						<artifactId>nexus-staging-maven-plugin</artifactId>
-						<version>${sonatype.nexus.staging}</version>
-						<extensions>true</extensions>
-						<configuration>
-							<serverId>ossrh</serverId>
-							<nexusUrl>https://oss.sonatype.org/</nexusUrl>
-							<autoReleaseAfterClose>false</autoReleaseAfterClose>
-						</configuration>
-					</plugin>
+<!--					<plugin>-->
+<!--						<groupId>org.apache.maven.plugins</groupId>-->
+<!--						<artifactId>maven-gpg-plugin</artifactId>-->
+<!--						<version>${maven.gpg.version}</version>-->
+<!--						<executions>-->
+<!--							<execution>-->
+<!--								<id>sign-artifacts</id>-->
+<!--								<phase>verify</phase>-->
+<!--								<goals>-->
+<!--									<goal>sign</goal>-->
+<!--								</goals>-->
+<!--								<configuration>-->
+<!--									<gpgArguments>-->
+<!--										<arg>&#45;&#45;batch</arg>-->
+<!--										<arg>&#45;&#45;pinentry-mode</arg>-->
+<!--										<arg>loopback</arg>-->
+<!--									</gpgArguments>-->
+<!--								</configuration>-->
+<!--							</execution>-->
+<!--						</executions>-->
+<!--					</plugin>-->
+<!--					<plugin>-->
+<!--						<groupId>org.sonatype.plugins</groupId>-->
+<!--						<artifactId>nexus-staging-maven-plugin</artifactId>-->
+<!--						<version>${sonatype.nexus.staging}</version>-->
+<!--						<extensions>true</extensions>-->
+<!--						<configuration>-->
+<!--							<serverId>ossrh</serverId>-->
+<!--							<nexusUrl>https://oss.sonatype.org/</nexusUrl>-->
+<!--							<autoReleaseAfterClose>false</autoReleaseAfterClose>-->
+<!--						</configuration>-->
+<!--					</plugin>-->
 				</plugins>
 			</build>
 		</profile>

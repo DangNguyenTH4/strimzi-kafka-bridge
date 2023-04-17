@@ -12,30 +12,19 @@ import io.strimzi.kafka.bridge.Endpoint;
 import io.strimzi.kafka.bridge.config.BridgeConfig;
 import io.strimzi.kafka.bridge.http.model.HttpBridgeError;
 import io.strimzi.kafka.bridge.http.model.KafkaConfigBody;
-import io.vertx.core.CompositeFuture;
-import io.vertx.core.Future;
-import io.vertx.core.Handler;
-import io.vertx.core.Promise;
-import io.vertx.core.Vertx;
+import io.vertx.core.*;
+import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RequestBody;
 import io.vertx.ext.web.RoutingContext;
-import io.vertx.kafka.admin.TopicDescription;
-import io.vertx.kafka.admin.ConfigEntry;
-import io.vertx.kafka.admin.OffsetSpec;
-import io.vertx.kafka.admin.Config;
-import io.vertx.kafka.admin.ListOffsetsResultInfo;
+import io.vertx.kafka.admin.*;
 import io.vertx.kafka.client.common.ConfigResource;
 import io.vertx.kafka.client.common.TopicPartition;
 import io.vertx.kafka.client.common.TopicPartitionInfo;
 import org.apache.kafka.common.errors.UnknownTopicOrPartitionException;
 
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Implementation of the admin client endpoint based on HTTP
@@ -105,22 +94,31 @@ public class HttpAdminClientEndpoint extends AdminClientEndpoint {
         String topicName = routingContext.pathParam("topicname");
         int numberOfPartitions = kafkaConfigBody.getPartitions();
         short numberOfReplica = (short) kafkaConfigBody.getReplicationFactor();
-        createTopic(kafkaConfigBody.getConfigs(), topicName, numberOfPartitions, numberOfReplica, handle -> {
-            if (handle.succeeded()) {
-                JsonObject root = new JsonObject();
-                root.put("topicName", topicName);
-                root.put("numberOfReplicas", numberOfReplica);
-                root.put("numberOfPartitions", numberOfPartitions);
-                HttpUtils.sendResponse(routingContext, HttpResponseStatus.OK.code(), BridgeContentType.JSON, root.toBuffer());
-            } else {
+        this.listTopics(result -> {
+            Set<String> topics = result.result();
+            if (topics != null && topics.contains(name)) {
                 HttpBridgeError error = new HttpBridgeError(
-                        HttpResponseStatus.INTERNAL_SERVER_ERROR.code(),
-                        handle.cause().getMessage());
-                HttpUtils.sendResponse(routingContext, HttpResponseStatus.INTERNAL_SERVER_ERROR.code(),
+                        HttpResponseStatus.CONFLICT.code(),
+                        "TOPIC_EXISTED");
+                HttpUtils.sendResponse(routingContext, HttpResponseStatus.CONFLICT.code(),
                         BridgeContentType.JSON, error.toJson().toBuffer());
             }
+            createTopic(kafkaConfigBody.getConfigs(), topicName, numberOfPartitions, numberOfReplica, handle -> {
+                if (handle.succeeded()) {
+                    JsonObject root = new JsonObject();
+                    root.put("topicName", topicName);
+                    root.put("numberOfReplicas", numberOfReplica);
+                    root.put("numberOfPartitions", numberOfPartitions);
+                    HttpUtils.sendResponse(routingContext, HttpResponseStatus.OK.code(), BridgeContentType.JSON, root.toBuffer());
+                } else {
+                    HttpBridgeError error = new HttpBridgeError(
+                            HttpResponseStatus.INTERNAL_SERVER_ERROR.code(),
+                            handle.cause().getMessage());
+                    HttpUtils.sendResponse(routingContext, HttpResponseStatus.INTERNAL_SERVER_ERROR.code(),
+                            BridgeContentType.JSON, error.toJson().toBuffer());
+                }
+            });
         });
-
     }
 
     private void doDeleteTopic(RoutingContext routingContext) {
@@ -144,7 +142,27 @@ public class HttpAdminClientEndpoint extends AdminClientEndpoint {
     }
 
     private void doUpdateTopicConfig(RoutingContext routingContext) {
-
+        RequestBody requestBody = routingContext.body();
+        KafkaConfigBody kafkaConfigBody = requestBody.asPojo(KafkaConfigBody.class);
+        String topicName = routingContext.pathParam("topicname");
+        if (kafkaConfigBody == null || kafkaConfigBody.getConfigs() == null) {
+            HttpUtils.sendResponse(routingContext, HttpResponseStatus.BAD_REQUEST.code(),
+                    BridgeContentType.JSON, Json.CODEC.toBuffer("BAD_REQUEST"));
+        }
+        updateTopicConfig(topicName, kafkaConfigBody.getConfigs(), handle -> {
+            if (handle.succeeded()) {
+                JsonObject root = new JsonObject();
+                root.put("topicName", topicName);
+                HttpUtils.sendResponse(routingContext, HttpResponseStatus.OK.code(), BridgeContentType.JSON, root.toBuffer());
+            } else {
+                HttpBridgeError error = new HttpBridgeError(
+                        HttpResponseStatus.INTERNAL_SERVER_ERROR.code(),
+                        handle.cause().getMessage()
+                );
+                HttpUtils.sendResponse(routingContext, HttpResponseStatus.INTERNAL_SERVER_ERROR.code(),
+                        BridgeContentType.JSON, error.toJson().toBuffer());
+            }
+        });
     }
 
     /**
