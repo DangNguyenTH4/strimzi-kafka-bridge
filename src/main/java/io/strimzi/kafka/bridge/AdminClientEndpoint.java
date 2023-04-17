@@ -10,13 +10,24 @@ import io.strimzi.kafka.bridge.config.KafkaConfig;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
-import io.vertx.kafka.admin.*;
+import io.vertx.kafka.admin.KafkaAdminClient;
+import io.vertx.kafka.admin.NewTopic;
+import io.vertx.kafka.admin.TopicDescription;
+import io.vertx.kafka.admin.Config;
+import io.vertx.kafka.admin.OffsetSpec;
+import io.vertx.kafka.admin.ListOffsetsResultInfo;
 import io.vertx.kafka.client.common.ConfigResource;
 import io.vertx.kafka.client.common.TopicPartition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+//import java.util.*;
+import java.util.Properties;
+import java.util.Set;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
 
 /**
  * Base class for admin client endpoint
@@ -82,7 +93,7 @@ public abstract class AdminClientEndpoint implements BridgeEndpoint {
         this.adminClient.listTopics(handler);
     }
 
-    protected void createTopic(String name, int partition, short re){
+    protected void createTopic(String name, int partition, short re) {
         log.info("Create topic, topic name: {}", name);
         NewTopic newTopic = new NewTopic(name, partition, re);
         this.adminClient.createTopics(Collections.singletonList(newTopic));
