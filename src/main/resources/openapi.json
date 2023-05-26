@@ -1658,6 +1658,48 @@
                 }
             ]
         },
+        "/topics/messages": {
+            "get": {
+                "tags": [
+                    "Consumers"
+                ],
+                "description": "Retrieves message history",
+                "operationId": "messageHistory",
+                "responses": {
+                    "200": {
+                        "description": "A summary of the offsets of the topic partition.",
+                        "content": {
+                            "application/vnd.kafka.v2+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OffsetsSummary"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "parameters": [
+                {
+                    "name": "topic",
+                    "in": "query",
+                    "description": "Topic name",
+                    "required": true,
+                    "schema": {
+                        "type": "string"
+                    }
+                },
+                {
+                    "name": "limitMessage",
+                    "in": "query",
+                    "description": "limit message",
+                    "required": false,
+                    "schema": {
+                        "type": "integer"
+                    }
+                }
+            ]
+        },
+
         "/consumers/{groupid}/instances/{name}": {
             "delete": {
                 "tags": [

@@ -52,6 +52,7 @@ public enum HttpOpenApiOperations {
     SEEK_TO_BEGINNING("seekToBeginning"),
     /** seek to the end of a topic partition */
     SEEK_TO_END("seekToEnd"),
+    MESSAGE_HISTORY("messageHistory"),
     /** check liveness of the bridge */
     HEALTHY("healthy"),
     /** check the readiness of the bridge */

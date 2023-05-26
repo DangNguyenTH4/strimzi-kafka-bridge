@@ -7,9 +7,9 @@ package io.strimzi.kafka.bridge;
 
 import io.strimzi.kafka.bridge.config.BridgeConfig;
 import io.strimzi.kafka.bridge.config.KafkaConfig;
-import io.vertx.core.AsyncResult;
-import io.vertx.core.Handler;
-import io.vertx.core.Vertx;
+import io.strimzi.kafka.bridge.http.model.MessageHistoryResponse;
+import io.vertx.core.*;
+import io.vertx.core.impl.ContextInternal;
 import io.vertx.kafka.client.common.TopicPartition;
 import io.vertx.kafka.client.consumer.KafkaConsumer;
 import io.vertx.kafka.client.consumer.KafkaConsumerRecords;
@@ -19,20 +19,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
  * Base class for sink bridge endpoints
  *
- * @param <K>   type of Kafka message key
- * @param <V>   type of Kafka message payload
+ * @param <K> type of Kafka message key
+ * @param <V> type of Kafka message payload
  */
 public abstract class SinkBridgeEndpoint<K, V> implements BridgeEndpoint {
 
@@ -67,10 +63,10 @@ public abstract class SinkBridgeEndpoint<K, V> implements BridgeEndpoint {
     /**
      * Constructor
      *
-     * @param vertx Vert.x instance
-     * @param bridgeConfig Bridge configuration
-     * @param format embedded format for the key/value in the Kafka message
-     * @param keyDeserializer Kafka deserializer for the message key
+     * @param vertx             Vert.x instance
+     * @param bridgeConfig      Bridge configuration
+     * @param format            embedded format for the key/value in the Kafka message
+     * @param keyDeserializer   Kafka deserializer for the message key
      * @param valueDeserializer Kafka deserializer for the message value
      */
     public SinkBridgeEndpoint(Vertx vertx, BridgeConfig bridgeConfig,
@@ -142,7 +138,7 @@ public abstract class SinkBridgeEndpoint<K, V> implements BridgeEndpoint {
 
     /**
      * Subscribe to the topics specified in the related {@link #topicSubscriptions} list
-     *
+     * <p>
      * It should be the next call after the {@link #initConsumer(Properties config)} after getting
      * the topics information in order to subscribe to them.
      *
@@ -195,7 +191,7 @@ public abstract class SinkBridgeEndpoint<K, V> implements BridgeEndpoint {
     /**
      * Subscribe to topics via the provided pattern represented by a Java regex
      *
-     * @param pattern Java regex for topics subscription
+     * @param pattern          Java regex for topics subscription
      * @param subscribeHandler handler to be executed when subscribe operation is done
      */
     protected void subscribe(Pattern pattern, Handler<AsyncResult<Void>> subscribeHandler) {
@@ -283,7 +279,7 @@ public abstract class SinkBridgeEndpoint<K, V> implements BridgeEndpoint {
     }
 
     protected void commit(Map<TopicPartition, io.vertx.kafka.client.consumer.OffsetAndMetadata> offsetsData,
-        Handler<AsyncResult<Map<TopicPartition, io.vertx.kafka.client.consumer.OffsetAndMetadata>>> commitOffsetsHandler) {
+                          Handler<AsyncResult<Map<TopicPartition, io.vertx.kafka.client.consumer.OffsetAndMetadata>>> commitOffsetsHandler) {
         this.consumer.commit(offsetsData, commitOffsetsHandler);
     }
 
@@ -313,5 +309,78 @@ public abstract class SinkBridgeEndpoint<K, V> implements BridgeEndpoint {
                 seekHandler.handle(result);
             }
         });
+    }
+
+    protected Future<List<MessageHistoryResponse<K, V>>> getMessageHistory(String topic, int limit) {
+        List<MessageHistoryResponse<K, V>> consumeRecord = new ArrayList<>();
+        List<MessageHistoryResponse<K, V>> recordsOutput = new ArrayList<>();
+        ContextInternal ctx = (ContextInternal) this.vertx.getOrCreateContext();
+        Promise<List<MessageHistoryResponse<K, V>>> promise = ctx.promise();
+        try {
+            Set<TopicPartition> topicPartitions = new HashSet<>();
+            consumer.partitionsFor(topic).onSuccess(listPart -> {
+                log.info("List partition: {}", listPart);
+                        listPart.forEach(partitionInfo -> {
+                            TopicPartition partition = new TopicPartition(partitionInfo.getTopic(), partitionInfo.getPartition());
+                            topicPartitions.add(partition);
+                        });
+                    })
+                    .onFailure(e -> {
+                        log.error("List partition failed: {}", e.getMessage());
+                        promise.fail(e);
+                        promise.future();
+                    })
+            ;
+            if (topicPartitions.size() == 0) {
+                log.info("partition size == 0;");
+                promise.complete(recordsOutput);
+                return promise.future();
+            }
+            log.info("Start get message");
+            Map<TopicPartition, Long> endOffsets = consumer.endOffsets(topicPartitions).result();
+            Map<TopicPartition, Long> msgOfEachPartition = new HashMap<>();
+            int rewind = limit;
+//            long startRead = System.currentTimeMillis();
+            for (Map.Entry<TopicPartition, Long> entry : endOffsets.entrySet()) {
+                Long endOffset = entry.getValue();
+                AtomicLong noOfMsg = endOffset > rewind ? new AtomicLong(rewind) : new AtomicLong(endOffset);
+
+                consumer.assign(Collections.singleton(entry.getKey()));
+                consumer.seek(entry.getKey(), endOffset - noOfMsg.get());
+                msgOfEachPartition.put(entry.getKey(), noOfMsg.get());
+
+                while (noOfMsg.get() > 0) {
+                    KafkaConsumerRecords<K, V> consumerRecords = consumer.poll(Duration.ofMillis(500)).result();
+                    // 500 is the time in milliseconds consumer will wait if no record is found at broker.
+                    if (consumerRecords.size() == 0) {
+                        break;
+                    }
+
+                    // print each record.
+                    consumerRecords.records().forEach(record -> {
+//                        System.out.printf("offset = %d, key = %s, value = %s, timestamp = %d%n", record.offset(), record.key(), record.value(), record.timestamp());
+                        MessageHistoryResponse<K, V> messageRecord = new MessageHistoryResponse<>(record.topic(), record.partition(),
+                                (int) record.offset(), record.timestamp(), record.serializedKeySize(),
+                                record.serializedValueSize(), record.key(), record.value());
+//                        messageRecordMap.put(messageRecord, messageRecord.getTimestamp());
+                        consumeRecord.add(messageRecord);
+                        noOfMsg.decrementAndGet();
+                    });
+
+                    // commits the offset of record to broker.
+                    consumer.commit();
+                }
+            }
+            consumeRecord.sort(Comparator.comparing((MessageHistoryResponse<K, V> o1) -> {
+                return o1.getTimestamp();
+            }).reversed());
+            recordsOutput = consumeRecord.subList(0, Math.min(limit, consumeRecord.size()));
+            promise.complete(recordsOutput);
+        } catch (Exception e) {
+            log.error("Read message failed, reason: {}", e.getMessage());
+            promise.fail(e);
+        }
+
+        return promise.future();
     }
 }

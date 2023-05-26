@@ -19,6 +19,7 @@ import io.vertx.kafka.admin.ListOffsetsResultInfo;
 import io.vertx.kafka.client.common.ConfigResource;
 import io.vertx.kafka.client.common.TopicPartition;
 import org.apache.kafka.clients.admin.*;
+import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.common.config.TopicConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,6 +39,7 @@ public abstract class AdminClientEndpoint implements BridgeEndpoint {
     protected String name;
     protected final Vertx vertx;
     protected final BridgeConfig bridgeConfig;
+    protected SinkBridgeEndpoint sinkBridgeEndpoint;
 
     private Handler<BridgeEndpoint> closeHandler;
 
@@ -88,7 +90,7 @@ public abstract class AdminClientEndpoint implements BridgeEndpoint {
     /**
      * Returns all the topics.
      */
-    protected void listTopics(Handler<AsyncResult<Set<String>>> handler) {
+    public void listTopics(Handler<AsyncResult<Set<String>>> handler) {
         log.info("List topics");
         this.adminClient.listTopics(handler);
     }
@@ -161,6 +163,12 @@ public abstract class AdminClientEndpoint implements BridgeEndpoint {
         log.info("Get the offset spec for partition {}", topicPartitionOffsets);
         this.adminClient.listOffsets(topicPartitionOffsets, handler);
     }
+
+    protected void getMessage(Map<TopicPartition, OffsetSpec> topicPartitionOffsets, Handler<AsyncResult<Map<TopicPartition, ListOffsetsResultInfo>>> handler) {
+        log.info("Get the offset spec for partition {}", topicPartitionOffsets);
+        this.adminClient.listOffsets(topicPartitionOffsets, handler);
+    }
+
 
     /**
      * Raise close event

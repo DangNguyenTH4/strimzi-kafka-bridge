@@ -156,6 +156,7 @@ public class HttpBridge extends AbstractVerticle {
                 routerBuilder.operation(this.SEEK.getOperationId().toString()).handler(this.SEEK);
                 routerBuilder.operation(this.SEEK_TO_BEGINNING.getOperationId().toString()).handler(this.SEEK_TO_BEGINNING);
                 routerBuilder.operation(this.SEEK_TO_END.getOperationId().toString()).handler(this.SEEK_TO_END);
+                routerBuilder.operation(this.MESSAGE_HISTORY.getOperationId().toString()).handler(this.MESSAGE_HISTORY);
                 routerBuilder.operation(this.LIST_TOPICS.getOperationId().toString()).handler(this.LIST_TOPICS);
                 routerBuilder.operation(this.CREATE_TOPIC.getOperationId().toString()).handler(this.CREATE_TOPIC);
                 routerBuilder.operation(HttpOpenApiOperations.CREATE_TOPIC_PARTITION.toString()).handler(this.CREATE_TOPIC);
@@ -434,6 +435,10 @@ public class HttpBridge extends AbstractVerticle {
         this.httpBridgeContext.setOpenApiOperation(HttpOpenApiOperations.SEEK_TO_END);
         processConsumer(routingContext);
     }
+    private void messageHistory(RoutingContext routingContext) {
+        this.httpBridgeContext.setOpenApiOperation(HttpOpenApiOperations.MESSAGE_HISTORY);
+        processDefaultConsumer(routingContext);
+    }
 
     /**
      * Process an HTTP request related to the consumer
@@ -449,6 +454,20 @@ public class HttpBridge extends AbstractVerticle {
 
         if (sinkEndpoint != null) {
             timestampMap.replace(kafkaConsumerInstanceId, System.currentTimeMillis());
+            sinkEndpoint.handle(new HttpEndpoint(routingContext));
+        } else {
+            HttpBridgeError error = new HttpBridgeError(
+                    HttpResponseStatus.NOT_FOUND.code(),
+                    "The specified consumer instance was not found."
+            );
+            HttpUtils.sendResponse(routingContext, HttpResponseStatus.NOT_FOUND.code(),
+                    BridgeContentType.KAFKA_JSON, error.toJson().toBuffer());
+        }
+    }
+
+    private void processDefaultConsumer(RoutingContext routingContext) {
+        DefaultHttpSinkBridgeEndpoint<byte[], byte[]> sinkEndpoint = getOrCreateDefaultHttpSinkBridgeEnpoint(routingContext);
+        if (sinkEndpoint != null) {
             sinkEndpoint.handle(new HttpEndpoint(routingContext));
         } else {
             HttpBridgeError error = new HttpBridgeError(
@@ -830,6 +849,13 @@ public class HttpBridge extends AbstractVerticle {
             seekToEnd(routingContext);
         }
     };
+    HttpOpenApiOperation MESSAGE_HISTORY = new HttpOpenApiOperation(HttpOpenApiOperations.MESSAGE_HISTORY) {
+
+        @Override
+        public void process(RoutingContext routingContext) {
+            messageHistory(routingContext);
+        }
+    };
 
     HttpOpenApiOperation HEALTHY = new HttpOpenApiOperation(HttpOpenApiOperations.HEALTHY) {
     
@@ -862,4 +888,41 @@ public class HttpBridge extends AbstractVerticle {
             information(routingContext);
         }
     };
+
+    private DefaultHttpSinkBridgeEndpoint<byte[], byte[]> getOrCreateDefaultHttpSinkBridgeEnpoint(RoutingContext routingContext){
+        String defaultGroup = "default";
+        String defaultName = "default";
+        DefaultHttpSinkBridgeEndpoint<byte[], byte[]> sink = null;
+        ConsumerInstanceId defaultConsumerId = new ConsumerInstanceId(defaultGroup, defaultName);
+        try {
+            EmbeddedFormat format = EmbeddedFormat.from("binary");
+            if(httpBridgeContext.getHttpSinkEndpoints().containsKey(defaultConsumerId)){
+                sink = ((DefaultHttpSinkBridgeEndpoint<byte[], byte[]>)httpBridgeContext.getHttpSinkEndpoints().get(defaultConsumerId));
+                timestampMap.replace(sink.getInstanceId(), System.currentTimeMillis());
+            }else{
+                sink = new DefaultHttpSinkBridgeEndpoint<>(defaultGroup, defaultName, this.vertx, this.bridgeConfig, this.httpBridgeContext,
+                        format, new ByteArrayDeserializer(), new ByteArrayDeserializer());
+
+                sink.closeHandler(endpoint -> {
+                    DefaultHttpSinkBridgeEndpoint<byte[], byte[]> httpEndpoint = (DefaultHttpSinkBridgeEndpoint<byte[], byte[]>) endpoint;
+                    httpBridgeContext.getHttpSinkEndpoints().remove(httpEndpoint.consumerInstanceId());
+                });
+                sink.open();
+                httpBridgeContext.getHttpSinkEndpoints().put(sink.consumerInstanceId(), sink);
+                timestampMap.put(sink.consumerInstanceId(), System.currentTimeMillis());
+//
+//                sink.handle(new HttpEndpoint(routingContext), endpoint -> {
+//                    DefaultHttpSinkBridgeEndpoint<byte[], byte[]> httpEndpoint = (DefaultHttpSinkBridgeEndpoint<byte[], byte[]>) endpoint;
+//                    httpBridgeContext.getHttpSinkEndpoints().put(httpEndpoint.consumerInstanceId(), httpEndpoint);
+//                    timestampMap.put(httpEndpoint.consumerInstanceId(), System.currentTimeMillis());
+//                });
+            }
+            return sink;
+        } catch (Exception ex) {
+            if (sink != null) {
+                sink.close();
+            }
+            return  null;
+        }
+    }
 }

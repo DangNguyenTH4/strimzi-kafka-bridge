@@ -58,17 +58,17 @@ import java.util.stream.Collectors;
 @SuppressWarnings({"checkstyle:ClassFanOutComplexity"})
 public class HttpSinkBridgeEndpoint<K, V> extends SinkBridgeEndpoint<K, V> {
 
-    private static final JsonObject EMPTY_JSON = new JsonObject();
+    protected static final JsonObject EMPTY_JSON = new JsonObject();
 
     Pattern forwardedHostPattern = Pattern.compile("host=([^;]+)", Pattern.CASE_INSENSITIVE);
     Pattern forwardedProtoPattern = Pattern.compile("proto=([^;]+)", Pattern.CASE_INSENSITIVE);
     Pattern hostPortPattern = Pattern.compile("^.*:[0-9]+$");
 
-    private MessageConverter<K, V, Buffer, Buffer> messageConverter;
+    protected MessageConverter<K, V, Buffer, Buffer> messageConverter;
 
-    private HttpBridgeContext<K, V> httpBridgeContext;
+    protected HttpBridgeContext<K, V> httpBridgeContext;
 
-    HttpSinkBridgeEndpoint(Vertx vertx, BridgeConfig bridgeConfig, HttpBridgeContext<K, V> context,
+    protected HttpSinkBridgeEndpoint(Vertx vertx, BridgeConfig bridgeConfig, HttpBridgeContext<K, V> context,
                            EmbeddedFormat format, Deserializer<K> keyDeserializer, Deserializer<V> valueDeserializer) {
         super(vertx, bridgeConfig, format, keyDeserializer, valueDeserializer);
         this.httpBridgeContext = context;
@@ -483,7 +483,7 @@ public class HttpSinkBridgeEndpoint<K, V> extends SinkBridgeEndpoint<K, V> {
      * @param value value of the configuration parameter
      * @param props Properties bag where to put the configuration parameter
      */
-    private void addConfigParameter(String key, String value, Properties props) {
+    protected void addConfigParameter(String key, String value, Properties props) {
         if (value != null) {
             props.put(key, value);
         }
@@ -546,7 +546,6 @@ public class HttpSinkBridgeEndpoint<K, V> extends SinkBridgeEndpoint<K, V> {
             case SEEK_TO_END:
                 doSeekTo(routingContext, bodyAsJson, this.httpBridgeContext.getOpenApiOperation());
                 break;
-
             case UNSUBSCRIBE:
                 doUnsubscribe(routingContext);
                 break;
@@ -555,8 +554,12 @@ public class HttpSinkBridgeEndpoint<K, V> extends SinkBridgeEndpoint<K, V> {
                 break;
 
             default:
-                throw new IllegalArgumentException("Unknown Operation: " + this.httpBridgeContext.getOpenApiOperation());
+                othersHandler(routingContext,bodyAsJson, handler);
         }
+    }
+
+    protected void othersHandler(RoutingContext routingContext, JsonObject bodyAsJson, Handler<?> handler) {
+        throw new IllegalArgumentException("Unknown Operation: " + this.httpBridgeContext.getOpenApiOperation());
     }
 
     private MessageConverter<K, V, Buffer, Buffer> buildMessageConverter() {
@@ -585,7 +588,7 @@ public class HttpSinkBridgeEndpoint<K, V> extends SinkBridgeEndpoint<K, V> {
      * @param routingContext context of the current HTTP request
      * @return the request URI for the future consumer requests
      */
-    private String buildRequestUri(RoutingContext routingContext) {
+    protected String buildRequestUri(RoutingContext routingContext) {
         // by default schema/proto and host comes from the base request information (i.e. "Host" header)
         String scheme = routingContext.request().scheme();
         String host = routingContext.request().host();
@@ -644,7 +647,7 @@ public class HttpSinkBridgeEndpoint<K, V> extends SinkBridgeEndpoint<K, V> {
         return String.format("%s://%s%s", scheme, host, path);
     }
 
-    private int handleError(Throwable ex) {
+    protected int handleError(Throwable ex) {
         if (ex instanceof IllegalStateException && ex.getMessage() != null &&
             ex.getMessage().contains("No current assignment for partition")) {
             return HttpResponseStatus.NOT_FOUND.code();
@@ -654,4 +657,5 @@ public class HttpSinkBridgeEndpoint<K, V> extends SinkBridgeEndpoint<K, V> {
             return HttpResponseStatus.INTERNAL_SERVER_ERROR.code();
         }
     }
+
 }
