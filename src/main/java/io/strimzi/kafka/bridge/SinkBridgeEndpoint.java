@@ -10,6 +10,7 @@ import io.strimzi.kafka.bridge.config.KafkaConfig;
 import io.strimzi.kafka.bridge.http.model.MessageHistoryResponse;
 import io.vertx.core.*;
 import io.vertx.core.impl.ContextInternal;
+import io.vertx.kafka.client.common.PartitionInfo;
 import io.vertx.kafka.client.common.TopicPartition;
 import io.vertx.kafka.client.consumer.KafkaConsumer;
 import io.vertx.kafka.client.consumer.KafkaConsumerRecords;
@@ -20,6 +21,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -313,50 +315,66 @@ public abstract class SinkBridgeEndpoint<K, V> implements BridgeEndpoint {
 
     protected Future<List<MessageHistoryResponse<K, V>>> getMessageHistory(String topic, int limit) {
         List<MessageHistoryResponse<K, V>> consumeRecord = new ArrayList<>();
-        List<MessageHistoryResponse<K, V>> recordsOutput = new ArrayList<>();
+
         ContextInternal ctx = (ContextInternal) this.vertx.getOrCreateContext();
         Promise<List<MessageHistoryResponse<K, V>>> promise = ctx.promise();
         try {
             Set<TopicPartition> topicPartitions = new HashSet<>();
-            consumer.partitionsFor(topic).onSuccess(listPart -> {
+            return consumer.partitionsFor(topic)
+                    .flatMap(listFuture -> {
+
+                        List<PartitionInfo> listPart = listFuture;
                         log.info("List partition: {}", listPart);
                         listPart.forEach(partitionInfo -> {
                             TopicPartition partition = new TopicPartition(partitionInfo.getTopic(), partitionInfo.getPartition());
                             topicPartitions.add(partition);
                         });
-                    })
-                    .onFailure(e -> {
-                        log.error("List partition failed: {}", e.getMessage());
-                        promise.fail(e);
-                        promise.future();
-                    })
-            ;
-            if (topicPartitions.size() == 0) {
-                log.info("partition size == 0;");
-                promise.complete(recordsOutput);
-                return promise.future();
-            }
-            log.info("Start get message");
-            Map<TopicPartition, Long> endOffsets = consumer.endOffsets(topicPartitions).result();
-            Map<TopicPartition, Long> msgOfEachPartition = new HashMap<>();
-            int rewind = limit;
-//            long startRead = System.currentTimeMillis();
-            for (Map.Entry<TopicPartition, Long> entry : endOffsets.entrySet()) {
-                Long endOffset = entry.getValue();
-                AtomicLong noOfMsg = endOffset > rewind ? new AtomicLong(rewind) : new AtomicLong(endOffset);
-                msgOfEachPartition.put(entry.getKey(), noOfMsg.get());
-                Future<List<MessageHistoryResponse<K,V>>> messageOfEachPartition = this.poolMessagePerPartition(entry, noOfMsg);
-                while(!messageOfEachPartition.isComplete()){
-                    log.info("pool message of partition: {}, ", entry.getKey().getPartition());
-                }
-                consumeRecord.addAll(messageOfEachPartition.result());
 
-            }
-            consumeRecord.sort(Comparator.comparing((MessageHistoryResponse<K, V> o1) -> {
-                return o1.getTimestamp();
-            }).reversed());
-            recordsOutput = consumeRecord.subList(0, Math.min(limit, consumeRecord.size()));
-            promise.complete(recordsOutput);
+                        if (topicPartitions.size() == 0) {
+                            log.info("partition size == 0;");
+                            promise.complete(new ArrayList<>());
+                            return promise.future();
+                        }
+
+                        log.info("Start get message");
+                        return consumer.endOffsets(topicPartitions)
+                                .flatMap(endOffsets ->{
+                                    List<MessageHistoryResponse<K, V>> recordsOutput = new ArrayList<>();
+//                                    Map<TopicPartition, Long> endOffsets = h;
+                                    Map<TopicPartition, Long> msgOfEachPartition = new HashMap<>();
+                                    int rewind = limit;
+//            long startRead = System.currentTimeMillis();
+                                    List<Future<List<MessageHistoryResponse<K, V>>>> messageOfEachPartitionFuture = new ArrayList<>();
+                                    for (Map.Entry<TopicPartition, Long> entry : endOffsets.entrySet()) {
+                                        Long endOffset = entry.getValue();
+                                        AtomicLong noOfMsg = endOffset > rewind ? new AtomicLong(rewind) : new AtomicLong(endOffset);
+                                        msgOfEachPartition.put(entry.getKey(), noOfMsg.get());
+                                        this.poolMessagePerPartition(entry, noOfMsg)
+                                                .andThen(h ->{
+                                                    consumeRecord.addAll(h.result());
+                                                });
+//                                        messageOfEachPartitionFuture.add(messageOfEachPartition);
+//                                        consumeRecord.addAll(messageOfEachPartition.result());
+
+                                    }
+//                                    CompletableFuture.join(messageOfEachPartitionFuture);
+                                    consumeRecord.sort(Comparator.comparing((MessageHistoryResponse<K, V> o1) -> {
+                                        return o1.getTimestamp();
+                                    }).reversed());
+                                    recordsOutput = consumeRecord.subList(0, Math.min(limit, consumeRecord.size()));
+                                    promise.complete(recordsOutput);
+                                    return promise.future();
+                                });
+
+
+                    }).onFailure(h -> {
+                        log.error(h.getMessage());
+                        promise.fail(h.getMessage());
+                        promise.future();
+                    });
+
+
+
         } catch (Exception e) {
             log.error("Read message failed, reason: {}", e.getMessage());
             promise.fail(e);
@@ -364,7 +382,8 @@ public abstract class SinkBridgeEndpoint<K, V> implements BridgeEndpoint {
 
         return promise.future();
     }
-    private Future<List<MessageHistoryResponse<K,V>>> poolMessagePerPartition(Map.Entry<TopicPartition, Long> entry, AtomicLong noOfMsg){
+
+    private Future<List<MessageHistoryResponse<K, V>>> poolMessagePerPartition(Map.Entry<TopicPartition, Long> entry, AtomicLong noOfMsg) {
         Long endOffset = entry.getValue();
 
         ContextInternal ctxPerpartition = (ContextInternal) this.vertx.getOrCreateContext();
@@ -374,7 +393,7 @@ public abstract class SinkBridgeEndpoint<K, V> implements BridgeEndpoint {
                 .andThen(h -> {
                     consumer.seek(entry.getKey(), endOffset - noOfMsg.get());
                 })
-                .transform(h->{
+                .transform(h -> {
                     while (noOfMsg.get() > 0) {
                         KafkaConsumerRecords<K, V> consumerRecordsOfPartition = consumer.poll(Duration.ofMillis(500)).result();
                         // 500 is the time in milliseconds consumer will wait if no record is found at broker.
@@ -398,7 +417,7 @@ public abstract class SinkBridgeEndpoint<K, V> implements BridgeEndpoint {
                     }
                     promisePerPartition.complete(consumeRecordOfPartition);
                     return promisePerPartition.future();
-                }).onFailure(ex->{
+                }).onFailure(ex -> {
                     promisePerPartition.fail(ex.getMessage());
                 });
         return promisePerPartition.future();
