@@ -319,7 +319,7 @@ public abstract class SinkBridgeEndpoint<K, V> implements BridgeEndpoint {
         try {
             Set<TopicPartition> topicPartitions = new HashSet<>();
             consumer.partitionsFor(topic).onSuccess(listPart -> {
-                log.info("List partition: {}", listPart);
+                        log.info("List partition: {}", listPart);
                         listPart.forEach(partitionInfo -> {
                             TopicPartition partition = new TopicPartition(partitionInfo.getTopic(), partitionInfo.getPartition());
                             topicPartitions.add(partition);
@@ -344,32 +344,13 @@ public abstract class SinkBridgeEndpoint<K, V> implements BridgeEndpoint {
             for (Map.Entry<TopicPartition, Long> entry : endOffsets.entrySet()) {
                 Long endOffset = entry.getValue();
                 AtomicLong noOfMsg = endOffset > rewind ? new AtomicLong(rewind) : new AtomicLong(endOffset);
-
-                consumer.assign(Collections.singleton(entry.getKey()));
-                consumer.seek(entry.getKey(), endOffset - noOfMsg.get());
                 msgOfEachPartition.put(entry.getKey(), noOfMsg.get());
-
-                while (noOfMsg.get() > 0) {
-                    KafkaConsumerRecords<K, V> consumerRecords = consumer.poll(Duration.ofMillis(500)).result();
-                    // 500 is the time in milliseconds consumer will wait if no record is found at broker.
-                    if (consumerRecords.size() == 0) {
-                        break;
-                    }
-
-                    // print each record.
-                    consumerRecords.records().forEach(record -> {
-//                        System.out.printf("offset = %d, key = %s, value = %s, timestamp = %d%n", record.offset(), record.key(), record.value(), record.timestamp());
-                        MessageHistoryResponse<K, V> messageRecord = new MessageHistoryResponse<>(record.topic(), record.partition(),
-                                (int) record.offset(), record.timestamp(), record.serializedKeySize(),
-                                record.serializedValueSize(), record.key(), record.value());
-//                        messageRecordMap.put(messageRecord, messageRecord.getTimestamp());
-                        consumeRecord.add(messageRecord);
-                        noOfMsg.decrementAndGet();
-                    });
-
-                    // commits the offset of record to broker.
-                    consumer.commit();
+                Future<List<MessageHistoryResponse<K,V>>> messageOfEachPartition = this.poolMessagePerPartition(entry, noOfMsg);
+                while(!messageOfEachPartition.isComplete()){
+                    log.info("pool message of partition: {}, ", entry.getKey().getPartition());
                 }
+                consumeRecord.addAll(messageOfEachPartition.result());
+
             }
             consumeRecord.sort(Comparator.comparing((MessageHistoryResponse<K, V> o1) -> {
                 return o1.getTimestamp();
@@ -382,5 +363,45 @@ public abstract class SinkBridgeEndpoint<K, V> implements BridgeEndpoint {
         }
 
         return promise.future();
+    }
+    private Future<List<MessageHistoryResponse<K,V>>> poolMessagePerPartition(Map.Entry<TopicPartition, Long> entry, AtomicLong noOfMsg){
+        Long endOffset = entry.getValue();
+
+        ContextInternal ctxPerpartition = (ContextInternal) this.vertx.getOrCreateContext();
+        List<MessageHistoryResponse<K, V>> consumeRecordOfPartition = new ArrayList<>();
+        Promise<List<MessageHistoryResponse<K, V>>> promisePerPartition = ctxPerpartition.promise();
+        consumer.assign(Collections.singleton(entry.getKey()))
+                .andThen(h -> {
+                    consumer.seek(entry.getKey(), endOffset - noOfMsg.get());
+                })
+                .transform(h->{
+                    while (noOfMsg.get() > 0) {
+                        KafkaConsumerRecords<K, V> consumerRecordsOfPartition = consumer.poll(Duration.ofMillis(500)).result();
+                        // 500 is the time in milliseconds consumer will wait if no record is found at broker.
+                        if (consumerRecordsOfPartition.size() == 0) {
+                            break;
+                        }
+
+                        // print each record.
+                        consumerRecordsOfPartition.records().forEach(record -> {
+//                        System.out.printf("offset = %d, key = %s, value = %s, timestamp = %d%n", record.offset(), record.key(), record.value(), record.timestamp());
+                            MessageHistoryResponse<K, V> messageRecord = new MessageHistoryResponse<>(record.topic(), record.partition(),
+                                    (int) record.offset(), record.timestamp(), record.serializedKeySize(),
+                                    record.serializedValueSize(), record.key(), record.value());
+//                        messageRecordMap.put(messageRecord, messageRecord.getTimestamp());
+                            consumeRecordOfPartition.add(messageRecord);
+                            noOfMsg.decrementAndGet();
+                        });
+
+                        // commits the offset of record to broker.
+                        consumer.commit();
+                    }
+                    promisePerPartition.complete(consumeRecordOfPartition);
+                    return promisePerPartition.future();
+                }).onFailure(ex->{
+                    promisePerPartition.fail(ex.getMessage());
+                });
+        return promisePerPartition.future();
+
     }
 }
