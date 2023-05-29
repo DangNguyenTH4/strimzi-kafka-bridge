@@ -353,11 +353,8 @@ public abstract class SinkBridgeEndpoint<K, V> implements BridgeEndpoint {
                                                 .andThen(h ->{
                                                     consumeRecord.addAll(h.result());
                                                 });
-//                                        messageOfEachPartitionFuture.add(messageOfEachPartition);
-//                                        consumeRecord.addAll(messageOfEachPartition.result());
 
                                     }
-//                                    CompletableFuture.join(messageOfEachPartitionFuture);
                                     consumeRecord.sort(Comparator.comparing((MessageHistoryResponse<K, V> o1) -> {
                                         return o1.getTimestamp();
                                     }).reversed());
@@ -395,25 +392,31 @@ public abstract class SinkBridgeEndpoint<K, V> implements BridgeEndpoint {
                 })
                 .transform(h -> {
                     while (noOfMsg.get() > 0) {
-                        KafkaConsumerRecords<K, V> consumerRecordsOfPartition = consumer.poll(Duration.ofMillis(500)).result();
-                        // 500 is the time in milliseconds consumer will wait if no record is found at broker.
-                        if (consumerRecordsOfPartition.size() == 0) {
-                            break;
-                        }
+                        consumer.poll(Duration.ofMillis(500))
+                                .andThen( pollHandler ->{
+                                    noOfMsg.decrementAndGet();
+                                })
+                                .onComplete(handler ->{
+                                    KafkaConsumerRecords<K, V> consumerRecordsOfPartition = handler.result();
+                                    // 500 is the time in milliseconds consumer will wait if no record is found at broker.
+                                    if (consumerRecordsOfPartition.size() == 0) {
+                                        noOfMsg.decrementAndGet();
+                                    }
 
-                        // print each record.
-                        consumerRecordsOfPartition.records().forEach(record -> {
+                                    // print each record.
+                                    consumerRecordsOfPartition.records().forEach(record -> {
 //                        System.out.printf("offset = %d, key = %s, value = %s, timestamp = %d%n", record.offset(), record.key(), record.value(), record.timestamp());
-                            MessageHistoryResponse<K, V> messageRecord = new MessageHistoryResponse<>(record.topic(), record.partition(),
-                                    (int) record.offset(), record.timestamp(), record.serializedKeySize(),
-                                    record.serializedValueSize(), record.key(), record.value());
+                                        MessageHistoryResponse<K, V> messageRecord = new MessageHistoryResponse<>(record.topic(), record.partition(),
+                                                (int) record.offset(), record.timestamp(), record.serializedKeySize(),
+                                                record.serializedValueSize(), record.key(), record.value());
 //                        messageRecordMap.put(messageRecord, messageRecord.getTimestamp());
-                            consumeRecordOfPartition.add(messageRecord);
-                            noOfMsg.decrementAndGet();
-                        });
+                                        consumeRecordOfPartition.add(messageRecord);
 
-                        // commits the offset of record to broker.
-                        consumer.commit();
+                                    });
+                                    // commits the offset of record to broker.
+                                    consumer.commit();
+                                });
+
                     }
                     promisePerPartition.complete(consumeRecordOfPartition);
                     return promisePerPartition.future();
